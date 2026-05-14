@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QFormLayout, QAbstractItemView, QDialog, QApplication,
     QHeaderView, QInputDialog, QMenu, QCheckBox, QTimeEdit,
     QFileDialog, QDateEdit, QGridLayout, QCalendarWidget, QSpinBox,
-    QSizePolicy, QFrame
+    QSizePolicy, QFrame, QScrollArea
 )
 from PySide6.QtGui import QFont, QAction, QIcon, QColor, QPixmap, QImage, QPainter, QPainterPath
 from PySide6.QtCore import Qt, QTime, QDate, QTimer
@@ -1569,19 +1569,16 @@ class UsersPage(QWidget):
         super().__init__()
         self.setObjectName("usersPage")
         self.setStyleSheet(f"{_PAGE_STYLE}\n{_ACTIVITY_LOG_STYLE}")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        root_layout = QHBoxLayout(self)
+        root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-        root_layout.addStretch(1)
 
         page_container = QWidget()
         page_container.setObjectName("usrActivityContainer")
-        # Standardize on 1400px centered layout for Admin dashboard.
-        page_container.setMinimumWidth(1400)
-        page_container.setMaximumWidth(1400)
-        root_layout.addWidget(page_container)
-        root_layout.addStretch(1)
+        page_container.setMinimumWidth(520)
+        page_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         page_layout = QVBoxLayout(page_container)
         # Align margins with Activity Log (32px instead of 24px) for consistency.
@@ -1600,7 +1597,7 @@ class UsersPage(QWidget):
         header_row.addStretch()
         page_layout.addLayout(header_row)
 
-        self._usr_section_hint = QLabel("Manage accounts, roles, and access status. Availability is edited per staff user.")
+        self._usr_section_hint = QLabel("Manage accounts, roles, and access status.")
         self._usr_section_hint.setObjectName("usrSectionHint")
         page_layout.addWidget(self._usr_section_hint)
 
@@ -1656,6 +1653,7 @@ class UsersPage(QWidget):
         # Users table panel (match Activity Log layout)
         self._usr_table_group = QFrame()
         self._usr_table_group.setObjectName("usrActivityPanel")
+        self._usr_table_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         table_vbox = QVBoxLayout(self._usr_table_group)
         table_vbox.setContentsMargins(0, 0, 0, 0)
         table_vbox.setSpacing(0)
@@ -1680,7 +1678,14 @@ class UsersPage(QWidget):
         self.new_user_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         users_toolbar.addWidget(self.new_user_btn)
 
-        table_vbox.addWidget(users_toolbar_host)
+        users_toolbar_scroll = QScrollArea()
+        users_toolbar_scroll.setWidgetResizable(True)
+        users_toolbar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        users_toolbar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        users_toolbar_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        users_toolbar_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        users_toolbar_scroll.setWidget(users_toolbar_host)
+        table_vbox.addWidget(users_toolbar_scroll)
 
         self.users_table = QTableWidget(0, 5)
         self.users_table.setObjectName("usrUsersTable")
@@ -1702,18 +1707,17 @@ class UsersPage(QWidget):
         self.users_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.users_table.customContextMenuRequested.connect(self._open_user_context_menu)
         self.users_table.itemSelectionChanged.connect(self._sync_status_action_labels)
-        # Make the Users panel "fill" like Activity Log (avoid compact columns + empty space).
-        self.users_table.horizontalHeader().setStretchLastSection(False)
-        self.users_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.users_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Interactive)
-        self.users_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.users_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.users_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        self.users_table.setColumnWidth(1, 140)
-        self.users_table.setColumnWidth(4, 110)
+        # Equal-width columns (Contact used to be sole Stretch and dominated the table).
+        _uh = self.users_table.horizontalHeader()
+        _uh.setStretchLastSection(False)
+        _uh.setMinimumSectionSize(88)
+        _uh.setDefaultSectionSize(160)
+        for _ci in range(self.users_table.columnCount()):
+            _uh.setSectionResizeMode(_ci, QHeaderView.Stretch)
         self.users_table.verticalHeader().setDefaultSectionSize(44)
         self.users_table.setMinimumHeight(200)
-        table_vbox.addWidget(self.users_table)
+        self.users_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        table_vbox.addWidget(self.users_table, 1)
 
         action_row = QHBoxLayout()
         action_row.addStretch()
@@ -1738,11 +1742,13 @@ class UsersPage(QWidget):
 
         page_layout.addWidget(self._usr_table_group, 1)
 
-        # Status bar
+        root_layout.addWidget(page_container, 1)
+
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("statusBar")
         self.status_label.setStyleSheet("color:#6c757d;font-size:12px;padding:2px 0;")
         self.status_label.hide()
+        page_layout.addWidget(self.status_label)
 
         self.refresh_users()
         
@@ -1910,16 +1916,12 @@ class UsersPage(QWidget):
         self.users_table.selectRow(item.row())
 
         menu = QMenu(self)
-        edit_availability_action = menu.addAction("Edit Availability")
-        menu.addSeparator()
         change_role_action = menu.addAction("Change Role")
         toggle_active_action = menu.addAction(self._status_action_text_for_selected_row())
         reset_password_action = menu.addAction("Reset Password")
 
         chosen = menu.exec(self.users_table.viewport().mapToGlobal(pos))
-        if chosen == edit_availability_action:
-            self.edit_selected_availability()
-        elif chosen == change_role_action:
+        if chosen == change_role_action:
             self.change_selected_role()
         elif chosen == toggle_active_action:
             self.toggle_selected_user_status()
@@ -1946,75 +1948,6 @@ class UsersPage(QWidget):
             if str(user.get("username") or "").strip().lower() == target:
                 return user
         return None
-
-    def edit_selected_availability(self):
-        row = self.users_table.currentRow()
-        if row == -1:
-            QMessageBox.warning(self, "No Selection", "Please select a user to edit availability.")
-            return
-
-        username_item = self.users_table.item(row, 1)
-        if not username_item:
-            return
-        username = username_item.text().strip()
-
-        user = self._get_user_by_username(username)
-        if not user:
-            QMessageBox.warning(self, "User Not Found", "Unable to load selected user details.")
-            return
-
-        role = str(user.get("role") or "").strip().lower()
-        if role == "admin":
-            QMessageBox.information(
-                self,
-                "Availability Not Required",
-                "Admin accounts do not require availability day/time.",
-            )
-            return
-
-        initial_payload = None
-        raw_availability = user.get("availability_json")
-        if raw_availability:
-            try:
-                initial_payload = json.loads(raw_availability) if isinstance(raw_availability, str) else raw_availability
-            except Exception:
-                initial_payload = None
-
-        dialog = AvailabilityDialog(self, initial_availability=initial_payload)
-        dialog.setWindowTitle(f"Edit Availability - {username}")
-        if dialog.exec() != QDialog.Accepted:
-            return
-
-        availability_json = "" if dialog.skip_selected else dialog.get_availability_json()
-        acting_username, acting_role = self._actor_context()
-        acting_password = self.prompt_for_admin_password(self, f"update availability for '{username}'")
-        if acting_password is None:
-            return
-        if not self._check_admin_password(acting_password):
-            return
-
-        success = user_store.update_user_availability(
-            username,
-            availability_json,
-            acting_username=acting_username,
-            acting_role=acting_role,
-            acting_password=acting_password,
-        )
-        if not success:
-            QMessageBox.warning(self, "Update Failed", f"Could not update availability for '{username}'.")
-            return
-
-        self._set_status(f"Availability updated for '{username}'")
-        actor_username = str(acting_username or "system").strip() or "system"
-        self.log_activity(
-            actor_username,
-            "USER_AVAILABILITY_UPDATED",
-            {"target": username},
-            action_text=f"USER_AVAILABILITY_UPDATED target={username}",
-        )
-        if hasattr(self, "show_notification"):
-            self.show_notification(f"Schedule updated for {username}.")
-        self.refresh_users()
 
     def _actor_context(self):
         parent_app = getattr(self, "parent_app", None)
@@ -2636,6 +2569,7 @@ class ActivityLogPage(QWidget):
         super().__init__()
         self.setObjectName("usersPage")
         self.setStyleSheet(f"{_PAGE_STYLE}\n{_ACTIVITY_LOG_STYLE}")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.current_page = 1
         self.total_events = 0
         self.total_pages = 1
@@ -2643,17 +2577,14 @@ class ActivityLogPage(QWidget):
         self._role_cache = {}
         self._selected_event_filter = ""
 
-        root_layout = QHBoxLayout(self)
+        root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
-        root_layout.addStretch(1)
 
         page_container = QWidget()
         page_container.setObjectName("usrActivityContainer")
-        page_container.setMinimumWidth(1400)
-        page_container.setMaximumWidth(1400)
-        root_layout.addWidget(page_container)
-        root_layout.addStretch(1)
+        page_container.setMinimumWidth(520)
+        page_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         main_layout = QVBoxLayout(page_container)
         main_layout.setContentsMargins(32, 32, 32, 32)
@@ -2685,6 +2616,7 @@ class ActivityLogPage(QWidget):
 
         self._log_group = QFrame()
         self._log_group.setObjectName("usrActivityPanel")
+        self._log_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         log_vbox = QVBoxLayout(self._log_group)
         log_vbox.setContentsMargins(0, 0, 0, 0)
         log_vbox.setSpacing(0)
@@ -2808,7 +2740,14 @@ class ActivityLogPage(QWidget):
         controls_row.addWidget(preset_7d_btn)
         controls_row.addWidget(preset_30d_btn)
         controls_row.addWidget(self.export_activity_btn)
-        log_vbox.addWidget(controls)
+        controls_scroll = QScrollArea()
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        controls_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        controls_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        controls_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        controls_scroll.setWidget(controls)
+        log_vbox.addWidget(controls_scroll)
 
         self.activity_log = QTableWidget(0, 4)
         self.activity_log.setObjectName("usrActivityTable")
@@ -2825,18 +2764,16 @@ class ActivityLogPage(QWidget):
         self.activity_log.setShowGrid(False)
         self.activity_log.setAlternatingRowColors(False)
         self.activity_log.horizontalHeader().setStretchLastSection(False)
-        self.activity_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.activity_log.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.activity_log.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self.activity_log.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
-        self.activity_log.horizontalHeader().setMinimumSectionSize(90)
-        self.activity_log.setColumnWidth(0, 220)
-        self.activity_log.setColumnWidth(2, 120)
-        self.activity_log.setColumnWidth(3, 180)
+        _al_h = self.activity_log.horizontalHeader()
+        _al_h.setMinimumSectionSize(72)
+        _al_h.setDefaultSectionSize(160)
+        for _aci in range(self.activity_log.columnCount()):
+            _al_h.setSectionResizeMode(_aci, QHeaderView.Stretch)
         self.activity_log.setWordWrap(True)
         self.activity_log.setMinimumHeight(200)
+        self.activity_log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.activity_log.setSortingEnabled(False)
-        log_vbox.addWidget(self.activity_log)
+        log_vbox.addWidget(self.activity_log, 1)
 
         pagination_row = QWidget()
         pagination_row.setObjectName("usrPaginationRow")
@@ -2857,10 +2794,13 @@ class ActivityLogPage(QWidget):
 
         main_layout.addWidget(self._log_group, 1)
 
+        root_layout.addWidget(page_container, 1)
+
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("statusBar")
         self.status_label.setStyleSheet("color:#6b7280;font-size:12px;padding:2px 0;")
         self.status_label.hide()
+        main_layout.addWidget(self.status_label)
 
         self._selected_event_filter = self._resolve_event_filter_value(self.event_type_filter.currentText())
         self._set_active_preset("7d")

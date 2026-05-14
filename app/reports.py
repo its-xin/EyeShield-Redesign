@@ -34,12 +34,26 @@ try:
     from .patient_record_groups import group_patient_record_rows
     from . import emr_service as emr
     from .ui_feedback import apply_dialog_style, show_success, show_error, show_warning, confirm
+    try:
+        from .branding import resolve_unified_logo_png_path
+    except (ImportError, Exception):
+        try:
+            from branding import resolve_unified_logo_png_path
+        except ImportError:
+            def resolve_unified_logo_png_path(): return ""
 except Exception:  # pragma: no cover
     from auth import UserManager
     from app_paths import PATIENT_RECORDS_DB_PATH
     from patient_record_groups import group_patient_record_rows
     import emr_service as emr
     from ui_feedback import apply_dialog_style, show_success, show_error, show_warning, confirm
+    try:
+        from .branding import resolve_unified_logo_png_path
+    except (ImportError, Exception):
+        try:
+            from branding import resolve_unified_logo_png_path
+        except ImportError:
+            def resolve_unified_logo_png_path(): return ""
     try:
         from .screening_widgets import ClickableImageLabel, DurationWidget
     except Exception:
@@ -178,6 +192,10 @@ def generate_unified_patient_report(parent, patient_record, eye_records, usernam
         buf.close()
         return f"data:image/png;base64,{bytes(ba.toBase64()).decode('ascii')}"
 
+    # Logo
+    logo_path = resolve_unified_logo_png_path()
+    logo_b64 = build_b64_image(logo_path, 100) if logo_path else ""
+
     # Sections
     def sec(title):
         return (
@@ -255,28 +273,31 @@ def generate_unified_patient_report(parent, patient_record, eye_records, usernam
 </style>
 </head><body>
     <!-- PAGE 1: HOSPITAL HEADER -->
-    <div style="background:#ffffff;border-bottom:2px solid #1e3a8a;padding:20px 40px;">
+    <div style="background:#ffffff; padding:15px 40px; border-bottom:1px solid #e2e8f0;">
         <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
-                <td width="80" align="center" valign="middle">
-                    <div style="width:80px;height:80px;background:#e8eef7;border:2px solid #1e3a8a;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:32pt;color:#1e3a8a;font-weight:800;">H</div>
+                <td width="70" align="left" valign="middle">
+                    {f'<img src="{logo_b64}" style="width:70px; height:70px; object-fit:contain;" />' if logo_b64 else '<div style="width:70px;height:70px;background:#e8eef7;border-radius:8px;"></div>'}
                 </td>
-                <td style="padding-left:20px;" valign="middle">
-                    <div style="font-size:20pt;font-weight:800;color:#1e3a8a;margin-bottom:4px;">EyeShield Vision Center</div>
-                    <div style="font-size:9pt;color:#64748b;line-height:1.4;">
-                        <div><b>Tel:</b> +63 090 343 4322 | <b>Email:</b> info@eyeshield.com</div>
-                        <div style="margin-top:2px;">67 San Isidro, Tarlac City, CCS 001 </div>
+                <td style="padding-left:15px;" valign="middle">
+                    <div style="font-size:18pt;font-weight:800;color:#1e3a8a;">EyeShield Vision Center</div>
+                    <div style="font-size:9pt;color:#64748b;line-height:1.2;margin-top:2px;">
+                        <b>Tel:</b> +63 090 343 4322 | <b>Email:</b> info@eyeshield.com<br/>
+                        67 San Isidro, Tarlac City, CCS 001
                     </div>
+                </td>
+                <td align="right" valign="middle">
+                    <div style="font-size:8pt;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Clinical Screening</div>
                 </td>
             </tr>
         </table>
     </div>
 
-    <!-- PATIENT SCREENING HEADER -->
-    <div class="header">
-        <div style="font-size:24pt;font-weight:800;letter-spacing:-0.5px;margin-bottom:5px;">Patient Screening Report</div>
-        <div style="margin-top:10px;font-size:10pt;opacity:0.9;">
-            <b>ID:</b> {esc(patient_record.get('patient_id'))} &nbsp;|&nbsp; <b>Date:</b> {report_date} &nbsp;|&nbsp; <b>By:</b> {esc(created_by)}
+    <!-- PATIENT SCREENING HEADER (Highly Compact) -->
+    <div class="header" style="padding: 15px 40px;">
+        <div style="font-size:20pt;font-weight:800;letter-spacing:-0.5px;margin:0;line-height:1;">Patient Screening Report</div>
+        <div style="margin-top:4px;font-size:10pt;opacity:0.9;font-weight:600;">
+            ID: {esc(patient_record.get('patient_id'))} &nbsp;&bull;&nbsp; Date: {report_date} &nbsp;&bull;&nbsp; By: {esc(created_by)}
         </div>
     </div>
     
@@ -3101,6 +3122,16 @@ class ReportsPage(QWidget):
             else:
                 self.archive_btn.setToolTip("Archive the selected active patient record")
 
+    def _ensure_main_screening_ready(self):
+        """Return (main_window, screening_page) after lazy-building the Screening tab if needed."""
+        main_window = self.window()
+        if not hasattr(main_window, "pages"):
+            return main_window, None
+        ensurer = getattr(main_window, "_ensure_lazy_stack_page", None)
+        if callable(ensurer):
+            ensurer(1)
+        return main_window, getattr(main_window, "screening_page", None)
+
     def start_frontdesk_followup(self) -> None:
         """Front desk shortcut: start follow-up without per-eye prompt (use latest record in visit)."""
         record = self._get_selected_record()
@@ -3226,13 +3257,11 @@ class ReportsPage(QWidget):
             show_warning(self, "New Follow-up Screening", "Unable to determine the source screening record.")
             return
 
-        main_window = self.window()
-        if not hasattr(main_window, "screening_page") or not hasattr(main_window, "pages"):
+        main_window, screening_page = self._ensure_main_screening_ready()
+        if not hasattr(main_window, "pages"):
             show_warning(self, "New Follow-up Screening", "Unable to open the screening page.")
             return
-
-        screening_page = main_window.screening_page
-        if not hasattr(screening_page, "load_patient_for_followup"):
+        if screening_page is None or not hasattr(screening_page, "load_patient_for_followup"):
             show_warning(self, "New Follow-up Screening", "Follow-up workflow is not available in this session.")
             return
 
@@ -3388,13 +3417,11 @@ class ReportsPage(QWidget):
             show_warning(self, "New Follow-up Screening", "Unable to determine the source screening record.")
             return
 
-        main_window = self.window()
-        if not hasattr(main_window, "screening_page") or not hasattr(main_window, "pages"):
+        main_window, screening_page = self._ensure_main_screening_ready()
+        if not hasattr(main_window, "pages"):
             show_warning(self, "New Follow-up Screening", "Unable to open the screening page.")
             return
-
-        screening_page = main_window.screening_page
-        if not hasattr(screening_page, "load_patient_for_followup"):
+        if screening_page is None or not hasattr(screening_page, "load_patient_for_followup"):
             show_warning(self, "New Follow-up Screening", "Follow-up workflow is not available in this session.")
             return
 
@@ -3507,8 +3534,8 @@ class ReportsPage(QWidget):
         if not action_record:
             return
 
-        main_window = self.window()
-        if not hasattr(main_window, "screening_page") or not hasattr(main_window, "pages"):
+        main_window, screening_page = self._ensure_main_screening_ready()
+        if not hasattr(main_window, "pages"):
             QMessageBox.warning(self, "Follow-Up Screening", "Unable to open the screening page.")
             return
 
@@ -3518,8 +3545,7 @@ class ReportsPage(QWidget):
             QMessageBox.warning(self, "Follow-Up Screening", "Unable to determine the source screening record.")
             return
 
-        screening_page = main_window.screening_page
-        if not hasattr(screening_page, "load_patient_for_followup"):
+        if screening_page is None or not hasattr(screening_page, "load_patient_for_followup"):
             QMessageBox.warning(self, "Follow-Up Screening", "Follow-up workflow is not available in this session.")
             return
 
@@ -3684,13 +3710,14 @@ class ReportsPage(QWidget):
 
         replace_mode = chosen == replace_btn
 
-        # Get main window and screening page
-        main_window = self.window()
-        if not hasattr(main_window, 'screening_page') or not hasattr(main_window, 'pages'):
+        main_window, screening_page = self._ensure_main_screening_ready()
+        if not hasattr(main_window, "pages"):
             QMessageBox.warning(self, "Navigation Error", "Unable to navigate to screening page.")
             return
+        if screening_page is None or not hasattr(screening_page, "load_patient_for_rescreen"):
+            QMessageBox.warning(self, "Navigation Error", "Unable to open the screening page.")
+            return
 
-        screening_page = main_window.screening_page
         if not screening_page.load_patient_for_rescreen(actual_record_id, replace_mode=replace_mode):
             QMessageBox.warning(self, "Load Patient", f"Failed to load patient data for rescreening.\n\nRecord ID: {actual_record_id}")
             return

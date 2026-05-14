@@ -15,17 +15,18 @@ if str(APP_DIR) not in sys.path:
 
 
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QFont, QFontDatabase
-from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtGui import QFont
 try:
     from .auth import UserManager
     from .login import LoginWindow
-    from .app_paths import ICONS_DIR, ensure_repo_dirs
+    from .app_paths import ensure_repo_dirs
+    from .branding import build_application_icon
     from .safety_runtime import get_results_dir, write_activity, write_crash_log
 except ImportError:
     from auth import UserManager
     from login import LoginWindow
-    from app_paths import ICONS_DIR, ensure_repo_dirs
+    from app_paths import ensure_repo_dirs
+    from branding import build_application_icon
     from safety_runtime import get_results_dir, write_activity, write_crash_log
 
 
@@ -43,19 +44,6 @@ def _hide_detached_windows_console():
             ctypes.windll.user32.ShowWindow(hwnd, 0)
     except Exception:
         pass
-
-
-def load_svg_icon(svg_path, size=256):
-    """Render an SVG file to a QIcon."""
-    renderer = QSvgRenderer(svg_path)
-    if not renderer.isValid():
-        return QIcon()
-    image = QImage(size, size, QImage.Format_ARGB32_Premultiplied)
-    image.fill(0)
-    painter = QPainter(image)
-    renderer.render(painter)
-    painter.end()
-    return QIcon(QPixmap.fromImage(image))
 
 
 def main() -> int:
@@ -81,15 +69,10 @@ def main() -> int:
     app.setFont(modern_font)
 
     # Enforce font family globally via stylesheet
-    app.setStyleSheet("* { font-family: 'Segoe UI Variable', 'Segoe UI', 'Inter', 'Arial', sans-serif; font-size: 13px; text-decoration: none; }")
+    app.setStyleSheet("* { font-family: 'Segoe UI Variable', 'Segoe UI', 'Inter', 'Arial', sans-serif; font-size: 10pt; text-decoration: none; }")
 
-    # Set application-wide icon
-    _logo_path = str(ICONS_DIR / "Logo.png")
-    _fallback_icon_path = str(ICONS_DIR / "eyeshield_icon.svg")
-    if os.path.isfile(_logo_path):
-        app.setWindowIcon(QIcon(_logo_path))
-    else:
-        app.setWindowIcon(load_svg_icon(_fallback_icon_path))
+    # Unified window/taskbar icon (Logo.png multi-resolution, same as login branding).
+    app.setWindowIcon(build_application_icon())
 
     # Initialize the database
     UserManager._init_db()

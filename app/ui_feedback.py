@@ -19,10 +19,8 @@ QMessageBox, QDialog {
 QMessageBox QLabel {
     color: #111827 !important;
     background: transparent !important;
-    font-size: 15px;
+    font-size: 11pt;
     font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
-    padding: 10px 16px 10px 16px;
-    min-height: 40px;
 }
 QPushButton {
     background-color: #f8fafc !important;
@@ -30,11 +28,9 @@ QPushButton {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 8px 16px;
-    font-size: 13px;
+    font-size: 10pt;
     font-weight: 600;
     min-width: 100px;
-    margin-left: 10px;
-    margin-bottom: 10px;
 }
 QPushButton:hover {
     background-color: #f1f5f9 !important;
@@ -52,12 +48,34 @@ def apply_dialog_style(box: QWidget) -> None:
     # resize event — callers often see a one-frame "tiny" dialog before it expands.
     prev_min = QSize(box.minimumSize())
     box.setStyleSheet(_DIALOG_STYLE)
+    
     if isinstance(box, QMessageBox):
         # QMessageBox needs explicit width for consistent text wrapping in our premium style.
         # 440px provides a comfortable line length for clinical explanations.
-        box.setFixedWidth(440) 
+        box.setMinimumWidth(440)
+        box.setMinimumHeight(180) # Ensure enough height for icon + text + buttons
+        
+        # Ensure the layout respects the new minimum width immediately
+        lay = box.layout()
+        if lay:
+            lay.activate()
+            # Add some breathing room around the edges
+            lay.setContentsMargins(20, 20, 20, 20)
+            if hasattr(lay, "setSpacing"):
+                lay.setSpacing(15)
+
         for label in box.findChildren(QLabel):
-            label.setWordWrap(True)
+            # Target main text labels (qt_msgbox_label, qt_msgbox_informativelabel)
+            obj_name = label.objectName()
+            is_text = label.text() and (not label.pixmap())
+            
+            if is_text or obj_name in ("qt_msgbox_label", "qt_msgbox_informativelabel"):
+                label.setWordWrap(True)
+                # Ensure text labels have enough space and correct font
+                label.setStyleSheet("padding: 5px 0px; font-size: 11pt; background: transparent;")
+            elif label.pixmap() or "icon" in obj_name.lower():
+                # Ensure the icon isn't squashed and has some margin
+                label.setStyleSheet("padding: 0px; margin-right: 15px; background: transparent;")
     else:
         # For standard QDialogs (like Comparison or Patient Overview), we avoid 
         # setFixedWidth so the window can respect its own size/minimum-size logic.
@@ -105,6 +123,7 @@ def confirm(
     title: str,
     message: str,
     *,
+    informative_text: str | None = None,
     yes_text: str = "Yes",
     no_text: str = "No",
 ) -> bool:
@@ -112,6 +131,8 @@ def confirm(
     box.setIcon(QMessageBox.Icon.Question)
     box.setWindowTitle(title)
     box.setText(message)
+    if informative_text:
+        box.setInformativeText(informative_text)
     yes = box.addButton(yes_text, QMessageBox.ButtonRole.AcceptRole)
     no = box.addButton(no_text, QMessageBox.ButtonRole.RejectRole)
     box.setDefaultButton(no)

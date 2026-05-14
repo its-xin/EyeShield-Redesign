@@ -61,6 +61,10 @@ try:
 except Exception:  # pragma: no cover
     from user_auth import get_user_profile
 
+try:
+    from .branding import build_application_icon, render_unified_brand_pixmap
+except Exception:  # pragma: no cover
+    from branding import build_application_icon, render_unified_brand_pixmap
 
 
 class DashboardWeeklyGraph(QWidget):
@@ -205,18 +209,12 @@ class EyeShieldApp(QMainWindow):
         self.resize(1280, 720)
         self.setWindowState(Qt.WindowState.WindowMaximized)
 
-        _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "eyeshield_icon.svg")
-        self._brand_logo_path = self._resolve_existing_path(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "Logo.png"),
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "logo.png"),
-            _icon_path,
-        )
         self._brand_title_path = self._resolve_existing_path(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "title.png"),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "Title.png"),
         )
-        self._app_icon_pixmap = self._load_svg_pixmap(_icon_path, 256)
-        self._app_icon = QIcon(self._app_icon_pixmap)
+        # Same multi-resolution icon as login window (Logo.png); overrides QApplication default.
+        self._app_icon = build_application_icon()
         self.setWindowIcon(self._app_icon)
         icons_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 
@@ -260,11 +258,9 @@ class EyeShieldApp(QMainWindow):
         self._brand_icon_label.setFixedSize(32, 32)
         self._brand_icon_label.setAlignment(Qt.AlignCenter)
         self._brand_icon_label.setStyleSheet("background: transparent;")
-        brand_pix = self._load_svg_pixmap_colored(_icon_path, "#60a5fa", 64)
+        brand_pix = render_unified_brand_pixmap(28, svg_tint_hex="#60a5fa")
         if not brand_pix.isNull():
-            self._brand_icon_label.setPixmap(
-                brand_pix.scaled(QSize(28, 28), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
+            self._brand_icon_label.setPixmap(brand_pix)
 
         brand_text_col = QVBoxLayout()
         brand_text_col.setSpacing(0)
@@ -1032,18 +1028,9 @@ class EyeShieldApp(QMainWindow):
         if not hasattr(self, "_brand_icon_label"):
             return
         color = "#93c5fd" if dark else "#60a5fa"
-        logo_path = getattr(self, "_brand_logo_path", "")
-        icons_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
-        icon_path = os.path.join(icons_dir, "eyeshield_icon.svg")
-        pix = QPixmap()
-        if logo_path and logo_path.lower().endswith(".svg"):
-            pix = self._load_svg_pixmap_colored(logo_path, color, 64)
-        elif os.path.exists(icon_path):
-            pix = self._load_svg_pixmap_colored(icon_path, color, 64)
+        pix = render_unified_brand_pixmap(28, svg_tint_hex=color)
         if not pix.isNull():
-            self._brand_icon_label.setPixmap(
-                pix.scaled(QSize(28, 28), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
+            self._brand_icon_label.setPixmap(pix)
 
     # ── Lazy stack pages (Screening / Reports / EMR) ───────────────────────────
 
@@ -3196,13 +3183,13 @@ class EyeShieldApp(QMainWindow):
         profile = get_user_profile(self.username) or {}
         raw = profile.get("availability_json")
         if not raw:
-            return "Not set", "Not set", "Update from Users > Edit Availability"
+            return "Not set", "Not set", ""
         try:
             payload = json.loads(raw) if isinstance(raw, str) else raw
         except Exception:
             payload = {}
         if not isinstance(payload, dict):
-            return "Not set", "Not set", "Update from Users > Edit Availability"
+            return "Not set", "Not set", ""
 
         start = str(payload.get("start_time") or "").strip()
         end   = str(payload.get("end_time")   or "").strip()
@@ -3221,7 +3208,7 @@ class EyeShieldApp(QMainWindow):
                 day_text = ", ".join(ordered)
 
         updated_at = str(payload.get("updated_at") or "").strip()
-        updated_text = "Update from Users > Edit Availability"
+        updated_text = ""
         if updated_at:
             with contextlib.suppress(Exception):
                 parsed = datetime.fromisoformat(updated_at)

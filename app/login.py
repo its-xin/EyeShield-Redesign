@@ -18,6 +18,11 @@ except Exception:
     from .user_auth import verify_user, get_user_profile
     from .auth import UserManager
 
+try:
+    from .branding import build_application_icon
+except Exception:
+    from branding import build_application_icon
+
 
 def _load_admin_contact():
     """Load admin contact info from config.json located next to this file."""
@@ -230,6 +235,7 @@ class LoginWindow(QWidget):
         self.lockout_timer.timeout.connect(self._update_lockout_countdown)
 
         self.setWindowTitle("EyeShield - Secure Login")
+        self.setWindowIcon(build_application_icon())
         self.setFixedSize(1000, 650)
         self.setObjectName("LoginWindow")
         self.setStyleSheet("""

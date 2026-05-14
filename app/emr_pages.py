@@ -1664,12 +1664,14 @@ class EmrVisitsPage(QWidget):
                         if not confirm(
                             self,
                             "Queue Priority Warning",
-                            f"You are starting a diagnosis for {curr_name or 'this patient'}.\n\n"
-                            f"There are {ahead_count} patient(s) waiting ahead in the queue.\n"
-                            f"The next patient should be: {next_patient}.\n\n"
-                            "Are you sure you want to proceed?",
+                            f"You are starting a diagnosis for {curr_name or 'this patient'}.",
+                            informative_text=(
+                                f"There are still {ahead_count} patient(s) before this patient in the queue.\n"
+                                f"The next patient should be: {next_patient}.\n\n"
+                                "Are you sure you want to proceed?"
+                            ),
                             yes_text="Proceed Anyway",
-                            no_text="Cancel"
+                            no_text="Cancel",
                         ):
                             return
         except Exception:
