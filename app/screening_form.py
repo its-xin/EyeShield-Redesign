@@ -45,6 +45,7 @@ try:
         READONLY_SPINBOX_STYLE,
         CHECKBOX_STYLE,
         CALENDAR_STYLE,
+        SYSTEM_UNCERTAIN_LABEL,
     )
     from .screening_worker import _InferenceWorker
     from .screening_widgets import ClickableImageLabel, ModernCalendarDateEdit, DurationWidget
@@ -59,7 +60,6 @@ try:
     from . import emr_service as emr
     from .safety_runtime import get_autosave_draft_path, safe_remove_file, write_activity
     from .ui_feedback import apply_dialog_style
-    from .model_inference import SYSTEM_UNCERTAIN_LABEL, check_image_quality, ImageUngradableError
 except ImportError:
     from screening_styles import (
         SCREENING_PAGE_STYLE,
@@ -70,6 +70,7 @@ except ImportError:
         READONLY_SPINBOX_STYLE,
         CHECKBOX_STYLE,
         CALENDAR_STYLE,
+        SYSTEM_UNCERTAIN_LABEL,
     )
     from screening_worker import _InferenceWorker
     from screening_widgets import ClickableImageLabel, ModernCalendarDateEdit, DurationWidget
@@ -90,7 +91,6 @@ except ImportError:
     import emr_service as emr
     from safety_runtime import get_autosave_draft_path, safe_remove_file, write_activity
     from ui_feedback import apply_dialog_style
-    from model_inference import SYSTEM_UNCERTAIN_LABEL, check_image_quality, ImageUngradableError
 except Exception:
     # Fallback definition if everything fails, though app_paths should be reachable
     from pathlib import Path
@@ -1074,7 +1074,7 @@ class ScreeningPage(QWidget):
         self.treatment_regimen.setObjectName("treatmentRegimenDropdown")
         self.treatment_regimen.addItems(["", "Insulin only", "Oral medications only", "Insulin + Oral medications", "Diet control only", "None/Unknown"])
         self._apply_visible_dropdown_style(self.treatment_regimen)
-        c2.addLayout(field("Treatment Regimen", self.treatment_regimen, "scr_label_treatment"))
+        c2.addLayout(field("Current Treatment Regimen", self.treatment_regimen, "scr_label_treatment"))
         self.notes = QTextEdit()
         self.notes.setPlaceholderText("Enter clinical notes…")
         self.notes.setMinimumHeight(72)
@@ -3522,6 +3522,10 @@ class ScreeningPage(QWidget):
 
         # Pre-check image quality to avoid the "page flicker" if the image is ungradable.
         try:
+            try:
+                from .model_inference import check_image_quality, ImageUngradableError
+            except ImportError:
+                from model_inference import check_image_quality, ImageUngradableError
             check_image_quality(self.current_image)
         except ImageUngradableError as exc:
             self._on_image_ungradable(str(exc))

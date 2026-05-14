@@ -433,8 +433,8 @@ class ResultsWindow(QWidget):
         decision_group = QGroupBox("Doctor Assessment")
         decision_group.setObjectName("resultGroupCard")
         decision_layout = QVBoxLayout(decision_group)
-        decision_layout.setContentsMargins(14, 14, 14, 14)
-        decision_layout.setSpacing(10)
+        decision_layout.setContentsMargins(14, 10, 14, 10)
+        decision_layout.setSpacing(6)
 
         self.step1_label = QLabel("1. Review AI result")
         self.step1_label.setObjectName("resultStatTitle")
@@ -513,10 +513,10 @@ class ResultsWindow(QWidget):
 
         self.override_reason_label = QLabel("Override justification of results")
         self.override_reason_label.setObjectName("metaText")
-        self.override_reason_input = QTextEdit()
+        self.override_reason_input = QLineEdit()
         self.override_reason_input.setObjectName("overrideCommentBox")
         self.override_reason_input.setPlaceholderText("Provide concise clinical justification...")
-        self.override_reason_input.setMinimumHeight(110)
+        self.override_reason_input.setFixedHeight(42)
         self.override_reason_input.textChanged.connect(self._on_override_reason_changed)
 
         comments_grid.addWidget(self.override_reason_label, 0, 0)
@@ -533,15 +533,15 @@ class ResultsWindow(QWidget):
         self.optional_comment_panel = QFrame()
         self.optional_comment_panel.setObjectName("decisionStepPanel")
         optional_layout = QVBoxLayout(self.optional_comment_panel)
-        optional_layout.setContentsMargins(12, 10, 12, 12)
-        optional_layout.setSpacing(8)
+        optional_layout.setContentsMargins(12, 10, 12, 10)
+        optional_layout.setSpacing(6)
 
         self.findings_label = QLabel("Optional doctor findings and comments")
         self.findings_label.setObjectName("metaText")
-        self.findings_input = QTextEdit()
+        self.findings_input = QLineEdit()
         self.findings_input.setObjectName("findingsCommentBox")
         self.findings_input.setPlaceholderText("Optional: add retinal findings or clinical comments...")
-        self.findings_input.setMinimumHeight(96)
+        self.findings_input.setFixedHeight(42)
         self.findings_input.textChanged.connect(self._on_findings_changed)
         optional_layout.addWidget(self.findings_label)
         optional_layout.addWidget(self.findings_input)
@@ -553,8 +553,8 @@ class ResultsWindow(QWidget):
         reco_card = QFrame()
         reco_card.setObjectName("resultStatCard")
         reco_layout = QVBoxLayout(reco_card)
-        reco_layout.setContentsMargins(18, 18, 18, 18)
-        reco_layout.setSpacing(8)
+        reco_layout.setContentsMargins(14, 10, 14, 10)
+        reco_layout.setSpacing(6)
         reco_title = QLabel("AI Recommendation")
         reco_title.setObjectName("resultStatTitle")
         self.treatment_suggestions_title = QLabel("Possible treatment suggestions (Doctor review required)")
@@ -632,8 +632,8 @@ class ResultsWindow(QWidget):
         explanation_group = QGroupBox("AI Summary")
         explanation_group.setObjectName("resultGroupCard")
         explanation_layout = QVBoxLayout(explanation_group)
-        explanation_layout.setContentsMargins(22, 20, 22, 20)
-        explanation_layout.setSpacing(10)
+        explanation_layout.setContentsMargins(14, 10, 14, 14)
+        explanation_layout.setSpacing(6)
 
         self.ai_summary_title = QLabel("AI SUMMARY")
         self.ai_summary_title.setObjectName("resultStatTitle")
@@ -873,8 +873,8 @@ class ResultsWindow(QWidget):
                 color: #94a3b8;
                 border-color: #dbeafe;
             }
-            QTextEdit#overrideCommentBox,
-            QTextEdit#findingsCommentBox {
+            QLineEdit#overrideCommentBox,
+            QLineEdit#findingsCommentBox {
                 background: #ffffff;
                 border: 1px solid #d1d5db;
                 border-radius: 8px;
@@ -882,8 +882,8 @@ class ResultsWindow(QWidget):
                 font-size: 13px;
                 color: #1f2937;
             }
-            QTextEdit#overrideCommentBox:focus,
-            QTextEdit#findingsCommentBox:focus {
+            QLineEdit#overrideCommentBox:focus,
+            QLineEdit#findingsCommentBox:focus {
                 border: 1px solid #60a5fa;
             }
             QFrame#uncertaintyPanel {
@@ -913,7 +913,7 @@ class ResultsWindow(QWidget):
                 color: #595959;
                 font-size: 13px;
                 font-weight: 500;
-                line-height: 1.6;
+                line-height: 1.4;
                 padding: 0;
             }
             QLabel#treatmentSuggestionsBody {
@@ -1266,14 +1266,14 @@ class ResultsWindow(QWidget):
         if text:
             self._override_justification = str(text).strip()
         else:
-            self._override_justification = str(self.override_reason_input.toPlainText() or "").strip()
+            self._override_justification = str(self.override_reason_input.text() or "").strip()
         self._refresh_decision_ui_state()
 
     def _on_findings_changed(self, text: str = ""):
         if text:
             self._doctor_findings = str(text).strip()
         else:
-            self._doctor_findings = str(self.findings_input.toPlainText() or "").strip()
+            self._doctor_findings = str(self.findings_input.text() or "").strip()
 
     def _refresh_decision_ui_state(self):
         ai_value = str(self._current_result_class or "").strip()
@@ -1310,8 +1310,8 @@ class ResultsWindow(QWidget):
         mode = self._decision_mode if self._decision_mode in ("accepted", "override") else "pending"
         if mode == "accepted" and requires_override:
             mode = "override"
-        override_text = str(self.override_reason_input.toPlainText() or self._override_justification or "").strip()
-        findings_text = str(self.findings_input.toPlainText() or self._doctor_findings or "").strip()
+        override_text = str(self.override_reason_input.text() or self._override_justification or "").strip()
+        findings_text = str(self.findings_input.text() or self._doctor_findings or "").strip()
 
         # Keep cached state aligned with latest UI before downstream save/report logic runs.
         self._doctor_classification = doctor_value
@@ -1503,13 +1503,34 @@ class ResultsWindow(QWidget):
             profile_txt = ", ".join(filter(None, profile_parts))
             
             vitals = []
-            if p_height: vitals.append(f"Height: {p_height}cm")
-            if p_weight: vitals.append(f"Weight: {p_weight}kg")
-            vitals_txt = f" ({', '.join(vitals)})" if vitals else ""
+            if p_height: vitals.append(f"measuring {p_height}cm in height")
+            if p_weight: vitals.append(f"weighing {p_weight}kg")
+            vitals_txt = f", { ' and '.join(vitals) }" if vitals else ""
             
             history = []
             if p_type and p_type != "Select": history.append(f"{p_type} diabetes")
-            if p_duration: history.append(f"{p_duration} years duration")
+            if p_duration:
+                # p_duration can be DAYS (from intake form) or YEARS (from saved records)
+                try:
+                    f_val = float(p_duration)
+                    # Heuristic: if value > 150, it's likely total DAYS. Otherwise, it's YEARS.
+                    days = int(f_val) if f_val > 150 else int(f_val * 365)
+                    
+                    y = days // 365
+                    rem = days % 365
+                    m = rem // 30
+                    d = rem % 30
+                    
+                    if y > 0:
+                        dur_str = f"{y}y {m}m" if m > 0 else f"{y} years"
+                    elif m > 0:
+                        dur_str = f"{m}m {d}d" if d > 0 else f"{m} months"
+                    else:
+                        dur_str = f"{d} days"
+                        
+                    history.append(f"{dur_str} duration")
+                except (ValueError, TypeError):
+                    pass
             if p_hba1c: history.append(f"HbA1c {p_hba1c}%")
             history_txt = f" with a history of {', '.join(history)}" if history else " with no recorded diabetic history"
             

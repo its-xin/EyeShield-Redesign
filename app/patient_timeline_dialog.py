@@ -709,7 +709,7 @@ class PatientTimelineDialog(QWidget):
         v.setContentsMargins(12, 10, 12, 10)
         v.setSpacing(2)
 
-        # Title row with Edit button
+        # Title row
         hdr = QWidget()
         hdr.setStyleSheet("background:transparent;")
         hdr_l = QHBoxLayout(hdr)
@@ -717,16 +717,8 @@ class PatientTimelineDialog(QWidget):
         hdr_l.setSpacing(0)
         title_lbl = QLabel("Patient Information")
         title_lbl.setStyleSheet("font-size:12px;font-weight:600;color:#374151;")
-        edit_btn = QPushButton("Edit")
-        edit_btn.setEnabled(False)
-        edit_btn.setFixedSize(44, 24)
-        edit_btn.setStyleSheet(
-            "QPushButton{background:#f8fafc;border:none;border-radius:6px;"
-            "color:#9ca3af;font-size:11px;font-weight:500;}"
-            "QPushButton:disabled{color:#d1d5db;}")
         hdr_l.addWidget(title_lbl)
         hdr_l.addStretch(1)
-        hdr_l.addWidget(edit_btn)
         v.addWidget(hdr)
 
         sep = QFrame()

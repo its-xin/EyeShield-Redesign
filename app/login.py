@@ -712,8 +712,9 @@ class LoginWindow(QWidget):
                 specialization=specialization,
                 contact=contact,
             )
-            self.main.show()
             self._allow_close_without_prompt = True
+            self.hide()
+            self.main.showMaximized()
             self.close()
         else:
             self.failed_attempts += 1

@@ -291,6 +291,9 @@ def generate_unified_patient_report(parent, patient_record, eye_records, usernam
                         {field_row("Date of Birth", esc(patient_record.get('birthdate')))}
                         {field_row("Age", esc(patient_record.get('age')))}
                         {field_row("Sex", esc(patient_record.get('sex')))}
+                        {field_row("Height", esc(patient_record.get('height')) + " cm" if patient_record.get('height') else "—")}
+                        {field_row("Weight", esc(patient_record.get('weight')) + " kg" if patient_record.get('weight') else "—")}
+                        {field_row("BMI", esc(patient_record.get('bmi')) if patient_record.get('bmi') else "—")}
                         {field_row("Contact Number", esc(patient_record.get('phone')))}
                         {field_row("Email Address", esc(patient_record.get('email')))}
                         {field_row("Residential Address", esc(patient_record.get('address')))}
@@ -451,9 +454,9 @@ class ScreeningComparisonDialog(QDialog):
             self._display_records = list(self.all_records)
             self._display_records.reverse()
             
-            # Default: Compare Latest (Index 0) with Previous (Index 1)
-            self.left_record = self._display_records[0]
-            self.right_record = self._display_records[1] if len(self._display_records) >= 2 else self._display_records[0]
+            # Default: Compare Previous (Index 1) with Latest (Index 0)
+            self.left_record = self._display_records[1] if len(self._display_records) >= 2 else self._display_records[0]
+            self.right_record = self._display_records[0]
         
         self.setWindowTitle("Compare Screenings")
         # Allow the dialog to be resized by the user and respond to parent size
@@ -492,8 +495,8 @@ class ScreeningComparisonDialog(QDialog):
         self._left_selector = _make_selector()
         self._right_selector = _make_selector()
         
-        if self._right_selector.count() >= 2:
-            self._right_selector.setCurrentIndex(1)
+        if self._left_selector.count() >= 2:
+            self._left_selector.setCurrentIndex(1)
             
         self._left_selector.currentIndexChanged.connect(self._on_left_changed)
         self._right_selector.currentIndexChanged.connect(self._on_right_changed)
@@ -2342,15 +2345,12 @@ class ReportsPage(QWidget):
         self._display_row_lookup = {}
 
         self.setStyleSheet("""
-            QWidget {
-                background: transparent;
-                color: palette(text);
-                font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-            }
             QWidget#reportsPageContainer {
                 background: #ffffff;
                 border: 1px solid #dbeafe;
                 border-radius: 16px;
+                color: #1f2937;
+                font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
             }
             QGroupBox {
                 background: transparent;
@@ -2716,7 +2716,7 @@ class ReportsPage(QWidget):
                 row["result"] = row.get("final_diagnosis_icdr") or row.get("doctor_classification") or row.get("result") or ""
                 # Single record unit: visit group (queue-<qid>), not legacy per-eye ids.
         except Exception as err:
-            QMessageBox.warning(self, "Reports", f"Failed to load report data: {err}")
+            show_warning(self, "Reports", f"Failed to load report data: {err}")
             return
         self._all_result_rows = rows
         self._record_lookup = {r["id"]: r for r in rows}
@@ -3127,7 +3127,7 @@ class ReportsPage(QWidget):
             from db import ensure_patient_records_db
         ok_db, err = ensure_patient_records_db()
         if not ok_db:
-            QMessageBox.warning(self, "New Follow-up Screening", f"Unable to open patient records DB: {err}")
+            show_warning(self, "New Follow-up Screening", f"Unable to open patient records DB: {err}")
             return
         import traceback as _tb
         record_id = 0
@@ -3210,7 +3210,7 @@ class ReportsPage(QWidget):
             record_id = int(cur.lastrowid or 0)
         except Exception as exc:
             _tb.print_exc()
-            QMessageBox.warning(
+            show_warning(
                 self, "New Follow-up Screening",
                 f"Unable to prepare the follow-up screening form.\n\nDetail: {type(exc).__name__}: {exc}",
             )
@@ -3223,22 +3223,22 @@ class ReportsPage(QWidget):
                 pass
 
         if record_id <= 0:
-            QMessageBox.warning(self, "New Follow-up Screening", "Unable to determine the source screening record.")
+            show_warning(self, "New Follow-up Screening", "Unable to determine the source screening record.")
             return
 
         main_window = self.window()
         if not hasattr(main_window, "screening_page") or not hasattr(main_window, "pages"):
-            QMessageBox.warning(self, "New Follow-up Screening", "Unable to open the screening page.")
+            show_warning(self, "New Follow-up Screening", "Unable to open the screening page.")
             return
 
         screening_page = main_window.screening_page
         if not hasattr(screening_page, "load_patient_for_followup"):
-            QMessageBox.warning(self, "New Follow-up Screening", "Follow-up workflow is not available in this session.")
+            show_warning(self, "New Follow-up Screening", "Follow-up workflow is not available in this session.")
             return
 
         if not screening_page.load_patient_for_followup(record_id):
             _tb.print_exc()
-            QMessageBox.warning(
+            show_warning(
                 self, "New Follow-up Screening",
                 f"Unable to load follow-up form for record #{record_id}.",
             )
@@ -3246,13 +3246,16 @@ class ReportsPage(QWidget):
 
         main_window.pages.setCurrentIndex(1)
         try:
-            from .auth import UserManager
+            try:
+                from .auth import UserManager
+            except Exception:
+                from auth import UserManager
+            UserManager.add_activity_log(
+                getattr(self, "username", "unknown"),
+                f"FD_FOLLOW_UP_STARTED patient_id={record.get('patient_id')}; previous_record_id={record_id}",
+            )
         except Exception:
-            from auth import UserManager
-        UserManager.add_activity_log(
-            self.username,
-            f"FD_FOLLOW_UP_STARTED patient_id={record.get('patient_id')}; previous_record_id={record_id}",
-        )
+            pass
 
     def _frontdesk_followup_from_overview(self, record: dict) -> None:
         """Called from the frontdesk-mode patient overview's follow-up button.
@@ -3285,7 +3288,7 @@ class ReportsPage(QWidget):
             from db import ensure_patient_records_db
         ok_db, err = ensure_patient_records_db()
         if not ok_db:
-            QMessageBox.warning(self, "New Follow-up Screening", f"Unable to open patient records DB: {err}")
+            show_warning(self, "New Follow-up Screening", f"Unable to open patient records DB: {err}")
             return
 
         import traceback as _tb
@@ -3369,7 +3372,7 @@ class ReportsPage(QWidget):
             record_id = int(cur.lastrowid or 0)
         except Exception as exc:
             _tb.print_exc()
-            QMessageBox.warning(
+            show_warning(
                 self, "New Follow-up Screening",
                 f"Unable to prepare the follow-up screening form.\n\nDetail: {type(exc).__name__}: {exc}",
             )
@@ -3382,22 +3385,22 @@ class ReportsPage(QWidget):
                 pass
 
         if record_id <= 0:
-            QMessageBox.warning(self, "New Follow-up Screening", "Unable to determine the source screening record.")
+            show_warning(self, "New Follow-up Screening", "Unable to determine the source screening record.")
             return
 
         main_window = self.window()
         if not hasattr(main_window, "screening_page") or not hasattr(main_window, "pages"):
-            QMessageBox.warning(self, "New Follow-up Screening", "Unable to open the screening page.")
+            show_warning(self, "New Follow-up Screening", "Unable to open the screening page.")
             return
 
         screening_page = main_window.screening_page
         if not hasattr(screening_page, "load_patient_for_followup"):
-            QMessageBox.warning(self, "New Follow-up Screening", "Follow-up workflow is not available in this session.")
+            show_warning(self, "New Follow-up Screening", "Follow-up workflow is not available in this session.")
             return
 
         if not screening_page.load_patient_for_followup(record_id):
             _tb.print_exc()
-            QMessageBox.warning(
+            show_warning(
                 self, "New Follow-up Screening",
                 f"Unable to load follow-up form for record #{record_id}.",
             )
@@ -3405,18 +3408,21 @@ class ReportsPage(QWidget):
 
         main_window.pages.setCurrentIndex(1)
         try:
-            from .auth import UserManager
+            try:
+                from .auth import UserManager
+            except Exception:
+                from auth import UserManager
+            UserManager.add_activity_log(
+                getattr(self, "username", "unknown"),
+                f"FD_FOLLOW_UP_STARTED patient_id={record.get('patient_id')}; previous_record_id={record_id}; source=overview",
+            )
         except Exception:
-            from auth import UserManager
-        UserManager.add_activity_log(
-            self.username,
-            f"FD_FOLLOW_UP_STARTED patient_id={record.get('patient_id')}; previous_record_id={record_id}; source=overview",
-        )
+            pass
 
     def start_referral_flow(self):
         record = self._get_selected_record()
         if not record:
-            QMessageBox.information(self, "Referral", "Select a patient record first.")
+            show_warning(self, "Referral", "Select a patient record first.")
             return
 
         self.generate_referral()

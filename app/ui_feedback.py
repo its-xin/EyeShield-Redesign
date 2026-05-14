@@ -13,18 +13,20 @@ from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton, QWidget
 
 _DIALOG_STYLE = """
 QMessageBox, QDialog {
-    background-color: white;
+    background-color: white !important;
+    background: white !important;
 }
 QMessageBox QLabel {
-    color: #111827;
-    background: transparent;
+    color: #111827 !important;
+    background: transparent !important;
     font-size: 15px;
     font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
     padding: 10px 16px 10px 16px;
+    min-height: 40px;
 }
 QPushButton {
-    background-color: #f8fafc;
-    color: #334155;
+    background-color: #f8fafc !important;
+    color: #334155 !important;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 8px 16px;
@@ -35,12 +37,12 @@ QPushButton {
     margin-bottom: 10px;
 }
 QPushButton:hover {
-    background-color: #f1f5f9;
+    background-color: #f1f5f9 !important;
     border-color: #cbd5e1;
-    color: #0f172a;
+    color: #0f172a !important;
 }
 QPushButton:pressed {
-    background-color: #e2e8f0;
+    background-color: #e2e8f0 !important;
 }
 """
 

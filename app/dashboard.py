@@ -33,26 +33,20 @@ from PySide6.QtGui import QIcon, QPixmap, QImage, QPainter, QFont, QShortcut, QK
 from PySide6.QtSvg import QSvgRenderer
 
 try:
-    from .screening import ScreeningPage
-    from .reports import ReportsPage
     from .users import UsersPage, ActivityLogPage
-    from .settings import SettingsPage, DARK_STYLESHEET
+    from .settings import SettingsPage
     from .help_support import HelpSupportPage
     from .trusted_hospitals import TrustedHospitalsPage
     from .auth import UserManager
     from .app_paths import PATIENT_RECORDS_DB_PATH
-    from .patient_timeline_dialog import PatientTimelineDialog
     from .patient_record_groups import group_patient_record_rows
 except Exception:  # pragma: no cover
-    from screening import ScreeningPage
-    from reports import ReportsPage
     from users import UsersPage, ActivityLogPage
-    from settings import SettingsPage, DARK_STYLESHEET
+    from settings import SettingsPage
     from help_support import HelpSupportPage
     from trusted_hospitals import TrustedHospitalsPage
     from auth import UserManager
     from app_paths import PATIENT_RECORDS_DB_PATH
-    from patient_timeline_dialog import PatientTimelineDialog
     from patient_record_groups import group_patient_record_rows
 
 try:
@@ -64,10 +58,8 @@ except Exception:  # pragma: no cover
 
 try:
     from .user_auth import get_user_profile
-    from .emr_pages import EmrVisitsPage
 except Exception:  # pragma: no cover
     from user_auth import get_user_profile
-    from emr_pages import EmrVisitsPage
 
 
 
@@ -176,6 +168,8 @@ class EyeShieldApp(QMainWindow):
 
     def __init__(self, username, role, display_name=None, full_name=None, specialization=None, contact=None):
         super().__init__()
+        # Avoid a one-frame flash of a non-maximized window while the UI tree is built.
+        self.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
 
         self.username = username
         self.role = role
@@ -204,17 +198,12 @@ class EyeShieldApp(QMainWindow):
         self._last_reports_refresh_at = 0.0
         self._last_activity_log_refresh_at = 0.0
 
-        self.setWindowTitle("EyeShield – DR Screening")
+        self.setWindowTitle("EyeShield")
         self.setMinimumSize(900, 560)
-        screen = QGuiApplication.primaryScreen()
-        if screen is not None:
-            available = screen.availableGeometry()
-            target_width = min(1660, max(1024, int(available.width() * 0.95)))
-            target_height = min(900, max(620, int(available.height() * 0.92)))
-            self.resize(target_width, target_height)
-        else:
-            self.resize(1280, 720)
-        self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
+        # Do not resize to a large "almost full" rect before maximizing — on Windows that
+        # often produces a visible intermediate window. Restore size uses a reasonable default.
+        self.resize(1280, 720)
+        self.setWindowState(Qt.WindowState.WindowMaximized)
 
         _icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "eyeshield_icon.svg")
         self._brand_logo_path = self._resolve_existing_path(
@@ -518,21 +507,11 @@ class EyeShieldApp(QMainWindow):
 
         self.pages = QStackedWidget()
 
-        self.screening_page = ScreeningPage()
-        self.screening_page.username = self.username
-        self.screening_page.display_name = self.display_name
-        self.screening_page.role = self.role
-        # Finish-session hook for the unified Results save prompt.
-        # Called via ScreeningPage.open_saved_patient_screening_history().
-        self.screening_page._post_save_history_handler = self._open_saved_patient_screening_history_from_screening
-        if hasattr(self.screening_page, "configure_role_permissions"):
-            self.screening_page.configure_role_permissions(self.role)
-        self.reports_page = ReportsPage(
-            self.username, self.role,
-            display_name=self.display_name,
-            specialization=self.specialization,
-        )
-        self.reports_page.records_changed_callback = self.refresh_dashboard
+        # Heavy tabs (Screening + ML stack, Reports, EMR) load on first open to keep sign-in fast.
+        self.screening_page = None
+        self.reports_page = None
+        self.emr_page = None
+
         self.users_page = UsersPage()
         self.activity_log_page = ActivityLogPage()
         self.settings_page = SettingsPage()
@@ -540,24 +519,23 @@ class EyeShieldApp(QMainWindow):
         self.trusted_hospitals_page = TrustedHospitalsPage()
         self.reserved_nav_page = QWidget()
         self.priority_cases_page = QWidget()
-        self.emr_page = EmrVisitsPage(self)
 
         self.dashboard_page = self.create_dashboard_page()
 
         self.users_page.parent_app = self
         self.activity_log_page.parent_app = self
 
-        self.pages.addWidget(self.dashboard_page)         # 0
-        self.pages.addWidget(self.screening_page)         # 1
-        self.pages.addWidget(self.users_page)             # 2
-        self.pages.addWidget(self.reports_page)           # 3
-        self.pages.addWidget(self.activity_log_page)      # 4
-        self.pages.addWidget(self.settings_page)          # 5
-        self.pages.addWidget(self.help_support_page)      # 6
-        self.pages.addWidget(self.trusted_hospitals_page) # 7
-        self.pages.addWidget(self.reserved_nav_page)      # 8
-        self.pages.addWidget(self.priority_cases_page)    # 9
-        self.pages.addWidget(self.emr_page)                # 10
+        self.pages.addWidget(self.dashboard_page)           # 0
+        self.pages.addWidget(self._lazy_stack_placeholder())  # 1 screening
+        self.pages.addWidget(self.users_page)               # 2
+        self.pages.addWidget(self._lazy_stack_placeholder())  # 3 reports
+        self.pages.addWidget(self.activity_log_page)        # 4
+        self.pages.addWidget(self.settings_page)            # 5
+        self.pages.addWidget(self.help_support_page)        # 6
+        self.pages.addWidget(self.trusted_hospitals_page)   # 7
+        self.pages.addWidget(self.reserved_nav_page)        # 8
+        self.pages.addWidget(self.priority_cases_page)      # 9
+        self.pages.addWidget(self._lazy_stack_placeholder())  # 10 emr
         self.pages.currentChanged.connect(self._on_page_changed)
 
         main_layout.addWidget(self.pages)
@@ -587,6 +565,8 @@ class EyeShieldApp(QMainWindow):
         self._setup_inactivity_timeout()
         self._setup_dashboard_clock()
         QTimer.singleShot(500, self._check_queue_on_signin)
+
+        self.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
 
     def _check_queue_on_signin(self):
         """Show a notification if there are patients in the queue (Doctors only)."""
@@ -649,6 +629,10 @@ class EyeShieldApp(QMainWindow):
             return
 
         latest_record = timeline_records[-1]
+        try:
+            from .patient_timeline_dialog import PatientTimelineDialog
+        except ImportError:  # pragma: no cover
+            from patient_timeline_dialog import PatientTimelineDialog
         panel = PatientTimelineDialog(
             latest_record,
             timeline_records,
@@ -1061,13 +1045,65 @@ class EyeShieldApp(QMainWindow):
                 pix.scaled(QSize(28, 28), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
 
+    # ── Lazy stack pages (Screening / Reports / EMR) ───────────────────────────
+
+    def _lazy_stack_placeholder(self) -> QWidget:
+        return QWidget(self.pages)
+
+    def _swap_stack_widget(self, index: int, widget: QWidget) -> None:
+        old = self.pages.widget(index)
+        if old is widget:
+            return
+        self.pages.removeWidget(old)
+        self.pages.insertWidget(index, widget)
+        old.deleteLater()
+
+    def _ensure_lazy_stack_page(self, index: int) -> None:
+        """Build Screening, Reports, or EMR tab the first time it is opened."""
+        if index == 1 and self.screening_page is None:
+            try:
+                from .screening import ScreeningPage
+            except ImportError:  # pragma: no cover
+                from screening import ScreeningPage
+            page = ScreeningPage()
+            page.username = self.username
+            page.display_name = self.display_name
+            page.role = self.role
+            page._post_save_history_handler = self._open_saved_patient_screening_history_from_screening
+            if hasattr(page, "configure_role_permissions"):
+                page.configure_role_permissions(self.role)
+            self.screening_page = page
+            self._swap_stack_widget(1, page)
+        elif index == 3 and self.reports_page is None:
+            try:
+                from .reports import ReportsPage
+            except ImportError:  # pragma: no cover
+                from reports import ReportsPage
+            page = ReportsPage(
+                self.username, self.role,
+                display_name=self.display_name,
+                specialization=self.specialization,
+            )
+            page.records_changed_callback = self.refresh_dashboard
+            self.reports_page = page
+            self._swap_stack_widget(3, page)
+        elif index == 10 and self.emr_page is None:
+            try:
+                from .emr_pages import EmrVisitsPage
+            except ImportError:  # pragma: no cover
+                from emr_pages import EmrVisitsPage
+            page = EmrVisitsPage(self)
+            self.emr_page = page
+            self._swap_stack_widget(10, page)
+
     # ── Navigation locking ────────────────────────────────────────────────────
 
     def _is_screening_navigation_locked(self) -> bool:
+        sp = getattr(self, "screening_page", None)
         return bool(
-            hasattr(self, "screening_page")
-            and hasattr(self.screening_page, "is_navigation_locked")
-            and self.screening_page.is_navigation_locked()
+            sp is not None
+            and hasattr(sp, "is_navigation_locked")
+            and sp.is_navigation_locked()
         )
 
     def _refresh_navigation_lock(self):
@@ -1088,6 +1124,7 @@ class EyeShieldApp(QMainWindow):
                     "Please wait for the image analysis to finish before changing tabs.",
                 )
             if hasattr(self, "pages"):
+                self._ensure_lazy_stack_page(1)
                 self.pages.setCurrentIndex(1)
                 self._active_nav_key = self._default_nav_key_for_page(1)
                 self._set_active_nav(1)
@@ -1100,9 +1137,10 @@ class EyeShieldApp(QMainWindow):
                 self._active_nav_key = self._default_nav_key_for_page(current_index)
                 self._set_active_nav(current_index)
             return
+        self._ensure_lazy_stack_page(index)
         if (
             index == 1
-            and hasattr(self, "emr_page")
+            and self.emr_page is not None
             and hasattr(self.emr_page, "release_screening_to_main_stack_if_embedded")
         ):
             self.emr_page.release_screening_to_main_stack_if_embedded()
@@ -1114,17 +1152,17 @@ class EyeShieldApp(QMainWindow):
             if hasattr(self.help_support_page, "_switch_mode"):
                 with contextlib.suppress(Exception):
                     self.help_support_page._switch_mode(mode)
-        if index == 1 and hasattr(self, "screening_page") and hasattr(self.screening_page, "sync_frontdesk_purpose_lock"):
+        if index == 1 and self.screening_page is not None and hasattr(self.screening_page, "sync_frontdesk_purpose_lock"):
             with contextlib.suppress(Exception):
                 self.screening_page.sync_frontdesk_purpose_lock()
         self._set_active_nav(self.pages.currentIndex())
         # If user clicks the active page again, currentChanged will not fire.
         # Force-refresh key data pages so the click always produces visible content.
-        if index == 3 and hasattr(self, "reports_page") and hasattr(self.reports_page, "refresh_report"):
+        if index == 3 and self.reports_page is not None and hasattr(self.reports_page, "refresh_report"):
             QTimer.singleShot(0, self.reports_page.refresh_report)
         if index == 4 and hasattr(self, "activity_log_page") and hasattr(self.activity_log_page, "load_activity_log"):
             QTimer.singleShot(0, self.activity_log_page.load_activity_log)
-        if index == 10 and hasattr(self, "emr_page"):
+        if index == 10 and self.emr_page is not None:
             emr = self.emr_page
             nav_for_emr = str(getattr(self, "_active_nav_key", "") or "").strip()
 
@@ -1140,7 +1178,7 @@ class EyeShieldApp(QMainWindow):
         QTimer.singleShot(0, lambda: self._set_active_nav(self.pages.currentIndex()))
 
     def _global_save_shortcut(self):
-        if not hasattr(self, "pages") or not hasattr(self, "screening_page"):
+        if not hasattr(self, "pages") or self.screening_page is None:
             return
         if self.pages.currentIndex() != 1:
             return
@@ -1150,6 +1188,7 @@ class EyeShieldApp(QMainWindow):
 
     def _on_page_changed(self, index):
         if self._is_screening_navigation_locked() and index != 1:
+            self._ensure_lazy_stack_page(1)
             self.pages.setCurrentIndex(1)
             self._active_nav_key = self._default_nav_key_for_page(1)
             self._set_active_nav(1)
@@ -1160,10 +1199,11 @@ class EyeShieldApp(QMainWindow):
             self._active_nav_key = self._default_nav_key_for_page(fallback_index)
             self._set_active_nav(fallback_index)
             return
+        self._ensure_lazy_stack_page(index)
         self._active_nav_key = self._default_nav_key_for_page(index)
         self._set_active_nav(index)
         now = time.monotonic()
-        if index == 3:
+        if index == 3 and self.reports_page is not None:
             needs_initial_report_load = not bool(getattr(self.reports_page, "_all_result_rows", []))
             if needs_initial_report_load or (now - self._last_reports_refresh_at >= 1.0):
                 self._last_reports_refresh_at = now
@@ -1175,7 +1215,7 @@ class EyeShieldApp(QMainWindow):
             if now - self._last_activity_log_refresh_at >= 1.0:
                 self._last_activity_log_refresh_at = now
                 QTimer.singleShot(120, self.activity_log_page.load_activity_log)
-        if index == 10 and hasattr(self, "emr_page"):
+        if index == 10 and self.emr_page is not None:
             emr = self.emr_page
             nk_tab = str(getattr(self, "_active_nav_key", "") or "").strip()
 
@@ -1245,6 +1285,10 @@ class EyeShieldApp(QMainWindow):
                 if ss := widget.styleSheet():
                     self._saved_styles[id(widget)] = (widget, ss)
                     widget.setStyleSheet(_strip_color_rules(ss))
+            try:
+                from .settings import DARK_STYLESHEET
+            except ImportError:  # pragma: no cover
+                from settings import DARK_STYLESHEET
             app.setStyleSheet(DARK_STYLESHEET)
             self._apply_nav_theme(True)
         else:
@@ -1265,13 +1309,13 @@ class EyeShieldApp(QMainWindow):
 
         self._set_active_nav(self.pages.currentIndex())
 
-        if hasattr(self, "screening_page") and hasattr(self.screening_page, "apply_theme"):
+        if self.screening_page is not None and hasattr(self.screening_page, "apply_theme"):
             self.screening_page.apply_theme(theme)
 
         if hasattr(self, "trusted_hospitals_page") and hasattr(self.trusted_hospitals_page, "apply_theme"):
             self.trusted_hospitals_page.apply_theme(theme)
 
-        if hasattr(self, "reports_page") and hasattr(self.reports_page, "apply_theme"):
+        if self.reports_page is not None and hasattr(self.reports_page, "apply_theme"):
             self.reports_page.apply_theme(theme)
 
         self._update_nav_icon(self._dark_mode)
@@ -1313,7 +1357,7 @@ class EyeShieldApp(QMainWindow):
 
         for page in (self.screening_page, self.reports_page, self.users_page,
                      self.activity_log_page, self.help_support_page):
-            if hasattr(page, "apply_language"):
+            if page is not None and hasattr(page, "apply_language"):
                 page.apply_language(language)
 
         self.refresh_dashboard()
@@ -1404,9 +1448,9 @@ class EyeShieldApp(QMainWindow):
         self.close()
 
     def _is_screening_ongoing_context(self) -> bool:
-        if not hasattr(self, "screening_page"):
+        page = getattr(self, "screening_page", None)
+        if page is None:
             return False
-        page = self.screening_page
         on_screening_tab = bool(hasattr(self, "pages") and self.pages.currentIndex() == 1)
         on_results_screen = bool(on_screening_tab and hasattr(page, "stacked_widget")
                                  and page.stacked_widget.currentIndex() == 1)
@@ -1428,6 +1472,7 @@ class EyeShieldApp(QMainWindow):
         if box.clickedButton() == yes_btn:
             return False
         if hasattr(self, "pages"):
+            self._ensure_lazy_stack_page(1)
             self.pages.setCurrentIndex(1)
             self._set_active_nav(1)
         return True
@@ -1855,7 +1900,7 @@ class EyeShieldApp(QMainWindow):
             pr_v.setContentsMargins(16, 14, 16, 16)
             pr_v.setSpacing(10)
 
-            pr_title = QLabel("PATIENT RECORD SEARCH AND TABLE")
+            pr_title = QLabel("")
             pr_title.setStyleSheet(
                 "color:#94a3b8;font-size:10px;font-weight:800;letter-spacing:1.0px;background:transparent;"
             )

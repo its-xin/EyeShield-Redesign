@@ -5,6 +5,7 @@ Extracted to avoid duplication and improve maintainability.
 
 # AI screening could not assign a reliable grade — must match model_inference.SYSTEM_UNCERTAIN_LABEL.
 _SYS_UNCERTAIN = "Uncertain — Specialist review required"
+SYSTEM_UNCERTAIN_LABEL = _SYS_UNCERTAIN
 
 # ── Per-grade clinical constants ──────────────────────────────────────────────
 DR_COLORS = {

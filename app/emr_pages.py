@@ -76,6 +76,15 @@ except Exception:
 LEGACY_DB_FILE = str(PATIENT_RECORDS_DB_PATH)
 
 
+def _ensure_main_screening_loaded(app) -> None:
+    """Ensure EyeShieldApp's Screening tab is constructed (lazy-loaded after login)."""
+    if app is None:
+        return
+    fn = getattr(app, "_ensure_lazy_stack_page", None)
+    if callable(fn):
+        fn(1)
+
+
 # ---------------------------------------------------------------------------
 # Visit status helpers (badge colours + human labels)
 # ---------------------------------------------------------------------------
@@ -952,9 +961,11 @@ class PatientVisitDialog(QDialog):
 
         self._patient = emr.get_patient(self._patient_id) or {}
         self._load_history()
-        if hasattr(self._parent_app, "screening_page"):
+        _ensure_main_screening_loaded(self._parent_app)
+        sp = getattr(self._parent_app, "screening_page", None)
+        if sp is not None and hasattr(sp, "apply_emr_context"):
             first_path = paths.get("Left") or paths.get("Right") or ""
-            self._parent_app.screening_page.apply_emr_context(
+            sp.apply_emr_context(
                 self._patient,
                 screening_id=sid,
                 queue_entry_id=active_qid,
@@ -1482,9 +1493,12 @@ class EmrVisitsPage(QWidget):
         return True
 
     def _embed_screening_in_emr_tab(self) -> None:
-        if not self._app or not hasattr(self._app, "screening_page") or not hasattr(self._app, "pages"):
+        if not self._app or not hasattr(self._app, "pages"):
             return
-        sp = self._app.screening_page
+        _ensure_main_screening_loaded(self._app)
+        sp = getattr(self._app, "screening_page", None)
+        if sp is None:
+            return
         pages = self._app.pages
         if pages.indexOf(sp) >= 0:
             pages.removeWidget(sp)
@@ -1544,9 +1558,12 @@ class EmrVisitsPage(QWidget):
 
     def release_screening_to_main_stack_if_embedded(self) -> None:
         """Return the screening widget to the main QStackedWidget if it was embedded in this tab."""
-        if not self._app or not hasattr(self._app, "screening_page") or not hasattr(self._app, "pages"):
+        if not self._app or not hasattr(self._app, "pages"):
             return
-        sp = self._app.screening_page
+        _ensure_main_screening_loaded(self._app)
+        sp = getattr(self._app, "screening_page", None)
+        if sp is None:
+            return
         if sp.parentWidget() is not getattr(self, "_diagnosis_host", None):
             return
         self._diagnosis_layout.removeWidget(sp)
@@ -1566,9 +1583,10 @@ class EmrVisitsPage(QWidget):
             return
 
         # If the global screening page is embedded, release it; otherwise just navigate back.
-        if self._app and hasattr(self._app, "screening_page"):
-            sp = self._app.screening_page
-            if sp.parentWidget() is getattr(self, "_diagnosis_host", None):
+        if self._app:
+            _ensure_main_screening_loaded(self._app)
+            sp = getattr(self._app, "screening_page", None)
+            if sp is not None and sp.parentWidget() is getattr(self, "_diagnosis_host", None):
                 self.release_screening_to_main_stack_if_embedded()
                 return
         self._show_queue_page()
@@ -2299,7 +2317,7 @@ class EmrVisitsPage(QWidget):
             show_error(self, "Queue", "Could not cancel this visit. Please try again.")
 
     def _clear_today_queue(self) -> None:
-        if not self._is_front():
+        if not (self._is_front() or self._is_clinical()):
             return
         uid = emr.get_user_id(self._username)
         if not uid:

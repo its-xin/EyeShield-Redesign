@@ -22,7 +22,13 @@ USERS_DB_PATH = DATA_DIR / "users.db"
 # Prefer a repo-root `patient_records.db` when present (common when users copy/restore
 # a DB file manually), otherwise default to `data/patient_records.db`.
 _ROOT_PATIENT_DB = PROJECT_ROOT / "patient_records.db"
-PATIENT_RECORDS_DB_PATH = _ROOT_PATIENT_DB if _ROOT_PATIENT_DB.exists() else (DATA_DIR / "patient_records.db")
+_APP_PATIENT_DB = APP_DIR / "patient_records.db"
+if _ROOT_PATIENT_DB.exists():
+    PATIENT_RECORDS_DB_PATH = _ROOT_PATIENT_DB
+elif _APP_PATIENT_DB.exists():
+    PATIENT_RECORDS_DB_PATH = _APP_PATIENT_DB
+else:
+    PATIENT_RECORDS_DB_PATH = DATA_DIR / "patient_records.db"
 LEGACY_DB_PATH = DATA_DIR / "eyeshield.db"
 USERS_BACKUP_DB_GLOB = "users.backup_*.db"
 
